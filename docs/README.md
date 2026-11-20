@@ -50,3 +50,7 @@ Keep filled-in copies out of public repos. They'll hold names, dates and DNS det
 | 1.2.0 | 2026-11-10 | What doesn't move added. Runbook is the canonical order, with licensing, coexistence, throttling and a worked rollback. More comms templates. Discovery questions for what doesn't move |
 | 1.1.0 | 2026-11-10 | DNS move playbook and lessons learnt added. Runbook and risk register updated after a live cutover |
 | 1.0.0 | 2026-11-09 | First release |
+
+## Maintaining the toolkit
+
+These folders are for whoever maintains the toolkit, not for copying into a project: [plan](plan/README.md) (backlog, next actions, open questions), [runbooks](runbooks/README.md) (journal, maintainer session), [architecture decisions](architecture/decisions/README.md) and [conventions](conventions/README.md). Start at [CLAUDE.md](../CLAUDE.md).
