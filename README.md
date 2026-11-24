@@ -5,7 +5,7 @@
 | | |
 | --- | --- |
 | Author | Mezba Uddin, Microsoft MVP |
-| Version | 1.3.0 |
+| Version | 1.5.0 (24 November 2026) |
 | Licence | MIT |
 | Came from | A real small-business migration: mailboxes with large archives, SharePoint, Teams, OneDrive and more than one domain |
 
@@ -52,7 +52,7 @@ flowchart LR
 | Cut over | [07 Domain cutover](07-DomainCutover/) | DNS record, add in destination first, release from source, verify, old addresses with X500s, sign-in names, temporary passwords. Plus `Test-CutoverReadiness` (go/no-go), `Export-DomainDns -FullScan` and `Set-DomainDnsRecords` (moving DNS hosting), `Add-TargetDomain -WaitForDns`, and `Block-SourceSignIn` | Both tenants, in order. `-WhatIf` |
 | Cut over | [08 Devices](08-Devices/) | Moves Entra joined laptops (and stand-alone PCs) to the destination with the person's files. [`Move-TenantDevices`](08-Devices/Move-TenantDevices.ps1) option 9 does a laptop **in one go**: one remote session, about 10 minutes, leaves, joins with a bulk enrolment package, restarts, and copies the person's files into their new profile at first sign-in. The same menu builds the package, copies Intune configuration and moves Autopilot hashes. [`Get-DeviceInventory`](08-Devices/Get-DeviceInventory.ps1) lists what you'll touch; [`Export-BitLockerKeys`](08-Devices/Export-BitLockerKeys.ps1) saves recovery keys before anything leaves the source | Destination (Intune, Autopilot) and each laptop. `-WhatIf`. Nothing is wiped |
 | Validate | [09 Validation](09-Validation/) | Checks the destination against the inventory, plan and mapping: types, licences, archives, item counts, addresses, X500s, OneDrives, list members, the password-change flag, and Conditional Access that will block your test sign-in. Pass, warn and fail report | No |
-| Decommission | [10 Decommission](10-Decommission/) | Block source sign-in, final incrementals, export and retain, unlicensed OneDrives, remove licences, close the tenant. [`Get-DecommissionReadiness`](10-Decommission/Get-DecommissionReadiness.ps1) tells you what still stops you | Read-only script. The closing steps are deliberate and by hand |
+| Decommission | [10 Decommission](10-Decommission/) | Block source sign-in, final incrementals, export and retain, unlicensed OneDrives, remove licences, close the tenant. [`Get-DecommissionReadiness`](10-Decommission/Get-DecommissionReadiness.ps1) tells you what still stops you; [`Remove-SourceLicences`](10-Decommission/Remove-SourceLicences.ps1) takes the licences back and lists the billing step for each subscription | Source only. `-WhatIf`. Skips break-glass, enabled accounts and holds. Never deletes users or data; cancelling billing stays by hand |
 | Any time | [tools](tools/) | `Test-ModuleHealth` finds the Graph module version clash before it stops a script. `Get-MigrationReport` reads every report CSV and shows what still needs a look, on screen or as one HTML page | No (`-Fix` installs modules) |
 | Plan and run | [docs](docs/) | [Discovery questionnaire](docs/Discovery-Questionnaire.md), [cutover runbook](docs/Cutover-Runbook.md), [comms templates](docs/Comms-Templates.md), [risk register](docs/Risk-Register.md), [handover template](docs/Handover-Template.md), [DNS move playbook](docs/DNS-Move-Playbook.md), [what doesn't move](docs/What-Doesnt-Move.md), [lessons learnt](docs/Lessons-Learnt.md) | No |
 
@@ -118,6 +118,7 @@ This repo used to be called M365-PreMigration-Inventory. GitHub redirects the ol
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.5.0 | 2026-11-24 | 10: `Remove-SourceLicences.ps1` removes source licences after the migration and says, per subscription, whether to cancel or turn off recurring billing |
 | 1.4.0 | 2026-11-13 | 08: option 9 moves a laptop in one go (files copied at first sign-in); stand-alone PCs too. `copy-options/B-ShareGate/Copy-PeopleOneDrives.ps1` finds OneDrive URLs by owner in both tenants. Phase 1 of the live job closed |
 | 1.3.0 | 2026-11-10 | 08 is now scripted end to end: `Move-TenantDevices` (package, Intune configuration copy, Autopilot, staged laptop move, profile handover) in the parts table, diagram and "How the parts fit". Intune policies no longer listed as not moving |
 | 1.2.0 | 2026-11-10 | Diagram and "How the parts fit" include 02b, 03, 08, 10 and tools. Points at the cutover runbook as the canonical order. Readiness at T-1 plus a final run on the night. What doesn't move added |

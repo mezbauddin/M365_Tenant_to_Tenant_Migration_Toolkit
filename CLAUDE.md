@@ -6,7 +6,7 @@
 
 A **public** toolkit (MIT) of PowerShell scripts and planning documents for moving a business from one Microsoft 365 tenant to another, in the order it's done. One spine of numbered parts (`01` to `10`, plus `02b`, `tools`) and three copy options (`copy-options/A`, `B`, `C`). Built from a real small-business migration.
 
-**Current status:** toolkit version 1.4.0 (13 Nov 2026). Option B (ShareGate) and part 08 (devices) used live; options A and C not yet lab-verified. Version history: the Changelog table in [`README.md`](README.md#changelog).
+**Current status:** toolkit version 1.5.0 (24 Nov 2026). Option B (ShareGate) and part 08 (devices) used live; options A and C not yet lab-verified. Version history: the Changelog table in [`README.md`](README.md#changelog).
 
 ## Where to start, by task
 

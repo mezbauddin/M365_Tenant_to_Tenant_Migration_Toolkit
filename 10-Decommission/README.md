@@ -1,12 +1,12 @@
 # 10 Decommission the source
 
-**TL;DR:** After cutover the source tenant is still there, still billing, still holding data and still accepting sign-ins unless you stop it. `Get-DecommissionReadiness.ps1` reads the source and tells you, PASS or WARN, who can still sign in, what's still licensed and when it renews, what's on hold, which OneDrives are unlicensed or archived, which domains and mailboxes are left, and whether mail is still flowing. The dated checklist below closes the tenant on purpose, on a timeline set by the licence end date, with every keep-or-delete decision signed off by the business owner. Examples use fabrikam.com as the source, moving into the contoso tenant.
+**TL;DR:** After cutover the source tenant is still there, still billing, still holding data and still accepting sign-ins unless you stop it. `Get-DecommissionReadiness.ps1` reads the source and tells you, PASS or WARN, who can still sign in, what's still licensed and when it renews, what's on hold, which OneDrives are unlicensed or archived, which domains and mailboxes are left, and whether mail is still flowing. When the business has signed off, `Remove-SourceLicences.ps1` takes the licences back (skipping break-glass, anyone who can still sign in and anything on hold) and tells you, subscription by subscription, whether to cancel or turn off recurring billing. The dated checklist below closes the tenant on purpose, on a timeline set by the licence end date, with every keep-or-delete decision signed off by the business owner. Examples use fabrikam.com as the source, moving into the contoso tenant.
 
 | | |
 | --- | --- |
 | Author | Mezba Uddin, Microsoft MVP |
-| Version | 1.0.1 (Get-DecommissionReadiness 1.0.0) |
-| Released | 10 November 2026 |
+| Version | 1.1.0 (Get-DecommissionReadiness 1.0.0, Remove-SourceLicences 1.0.0) |
+| Released | 24 November 2026 |
 | Licence | MIT |
 
 Part 10 of my [M365 tenant-to-tenant migration toolkit](../README.md). It starts the day after the [cutover runbook](../docs/Cutover-Runbook.md) ends.
@@ -53,6 +53,42 @@ Needs `Microsoft.Graph.Authentication` and `ExchangeOnlineManagement` 3.x; `Micr
 | `DecommissionDetail-Mailboxes-<date>.csv` | Every mailbox left, with size, holds and last logon |
 | `DecommissionDetail-OneDrives-<date>.csv` | Every OneDrive, owner, licensed or not, size, lock and archive state |
 
+## Remove-SourceLicences.ps1
+
+Changes the source. Run it at T+30, once the final incrementals, exports, hold decisions and the OneDrive decision are done, and always with `-WhatIf` first. It doesn't delete anyone: users, mailboxes and OneDrives stay until the subscriptions run out.
+
+1. Signs in to the source with Graph (and Exchange Online for the hold check) and stops if it's the wrong tenant or account.
+2. Shows the licences in use as a numbered list. Pick the ones to remove, or `0` for all. `-SkuPartNumber` or `-AllSkus` skip the list.
+3. For each licensed user, removes the chosen licences, except:
+
+| Skipped | Why | To include them |
+| --- | --- | --- |
+| Your own account and `-Exclude` | Break-glass and anything still being exported keep working | Leave them out of `-Exclude` |
+| Anyone who can still sign in | They may still be using the old tenant | Block them first ([07 Block-SourceSignIn.ps1](../07-DomainCutover/)), or `-IncludeEnabled` |
+| Mailboxes on litigation, In-Place or retention hold | Someone decided that data must be kept | The hold owner's decision in writing, then `-IncludeHeld` |
+| Licences that come from a group | You can't take a group licence off one person | `-IncludeGroupLicences` removes it from the group, only when no skipped user gets it from that group, and never with `-Users` |
+
+4. Reads every subscription and writes the billing step for each one: **cancel** if it started in the last 7 days, otherwise **turn off recurring billing** so it ends on its date. A trial is turned off before it converts to paid. One already lapsing is left alone.
+
+```powershell
+# Dry run: pick the licences, see who would lose what and what to do with each subscription
+.\Remove-SourceLicences.ps1 -TenantId <source-guid> -AdminUpn admin@fabrikam.onmicrosoft.com `
+    -Exclude breakglass@fabrikam.onmicrosoft.com -WhatIf
+
+# For real, every licence, no prompts
+.\Remove-SourceLicences.ps1 -TenantId <source-guid> -AdminUpn admin@fabrikam.onmicrosoft.com `
+    -Exclude breakglass@fabrikam.onmicrosoft.com -AllSkus -Confirm:$false
+```
+
+Needs `Microsoft.Graph.Authentication`, and `ExchangeOnlineManagement` 3.x for the hold check (`-SkipHoldCheck` only when the readiness check already showed no holds). License Administrator or User Administrator removes user licences; Groups Administrator for `-IncludeGroupLicences`.
+
+| File | Contents |
+| --- | --- |
+| `LicenceRemoval-<date>.csv` | One row per user (or group) and licence: assigned directly or by group, on hold, Action (Removed, WouldRemove, Skipped, Group, Failed) and why. Written under `-WhatIf` too |
+| `SubscriptionBilling-<date>.csv` | Every subscription: status, seats, used, created, end or renewal date, and NextStep |
+
+**Why the last step is by hand:** Microsoft has no Graph API to cancel a Microsoft 365 subscription or turn off its recurring billing. For a subscription bought directly, a Billing Administrator does it in the admin centre: Billing, Your products, the subscription, Recurring billing (or Cancel subscription, inside the 7-day window). For one bought through a partner (CSP), the partner does it in Partner Center. Removing licences frees the seats; only billing stops the charge.
+
 ## The checklist
 
 Fill in the dates on day one. Work back from the **licence end date** (the script's `NextLifecycle`, or Billing, Your products in the admin centre). If the end date is too close for this timeline, buy a short extension: it's cheaper than losing data.
@@ -65,9 +101,9 @@ Fill in the dates on day one. Work back from the **licence end date** (the scrip
 | T+7 | | Lead and business owner | Re-run the readiness check. Go through every WARN together. Write the decision for each one in the decommission plan ([handover template](../docs/Handover-Template.md)) | [ ] |
 | T+14 | | Lead | Export anything to keep that didn't move: Purview eDiscovery, a search per person or mailbox, export to PST. Inactive mailboxes and anything on hold first. Store the exports where the business owner agreed, and record where | [ ] |
 | T+14 | | Lead | Mail flow WARNs: find whatever still sends to or from the source (scanners, website forms, apps with an old onmicrosoft.com address) and repoint it | [ ] |
-| T+30 | | Lead | Holds released by their owner, or exported. Then remove licences from users. Unlicensed OneDrives start their timer now | [ ] |
+| T+30 | | Lead | Holds released by their owner, or exported. Then remove licences from users: `Remove-SourceLicences.ps1 -WhatIf`, then for real. Unlicensed OneDrives start their timer now | [ ] |
 | T+30 | | Device support | Every Entra joined laptop moved with [08 Move-TenantDevices.ps1](../08-Devices/) (state Done on each). Then **delete** the old device objects in the source: Entra ID devices, Intune managed devices and Autopilot registrations (option 3 > move removes those). Delete only; never wipe or retire | [ ] |
-| T+30 | | Lead | Turn off recurring billing on every subscription (admin centre, Billing, Your products, the subscription, Recurring billing). Or cancel, if the agreement allows | [ ] |
+| T+30 | | Lead | Turn off recurring billing on every subscription, as `SubscriptionBilling-<date>.csv` says (admin centre, Billing, Your products, the subscription, Recurring billing). Or cancel, inside the 7-day window or if the agreement allows. Bought through a partner: ask the partner | [ ] |
 | Licence end minus 14 days | | Lead and business owner | **Decide on archived and unlicensed OneDrives**, one by one: already copied (nothing to do), relicense the owner and copy (reactivates an archived one free in 24 to 48 hours), eDiscovery export, or pay-as-you-go reactivation. Record each decision | [ ] |
 | Licence end minus 7 days | | Lead | Final readiness run. Only the WARNs the business owner accepted in writing should remain | [ ] |
 | Licence end | | | Subscriptions expire, or you cancel them. Remove remaining custom domains first if any are left, or they stay tied to a tenant you can't easily get back into | [ ] |
@@ -85,6 +121,7 @@ With Microsoft's default settings, a OneDrive whose owner has no licence becomes
 
 | Route | How |
 | --- | --- |
+| This part | `Get-DecommissionReadiness.ps1` to see what's left, `Remove-SourceLicences.ps1` to take licences back and list the billing step per subscription, the checklist for the rest |
 | Paid tool | Most migration tools (ShareGate included) can run a last incremental and report what changed. Archiving and backup products can take a full export of mailboxes and OneDrives before the tenant closes, and keep it searchable for years. Worth it when there's a long retention requirement |
 | Microsoft's own | Microsoft Purview eDiscovery for holds and exports to PST; Microsoft 365 Archive and pay-as-you-go for OneDrives you must keep but don't need live; the admin centre for blocking sign-in, removing licences and turning off recurring billing. Free apart from pay-as-you-go storage |
 | By hand | Block each user in the admin centre, download what's needed from each OneDrive, and cancel the subscription. Workable for a handful of people, with this checklist and a second pair of eyes |
@@ -96,6 +133,7 @@ With Microsoft's default settings, a OneDrive whose owner has no licence becomes
 - **Trap: holds outlive licences.** Removing a licence or deleting a user doesn't release a litigation or retention hold; the data becomes an inactive mailbox. Deleting the tenant does release it. Get the hold owner's decision in writing.
 - **Trap: wipe and retire reach real laptops.** A laptop that has left the source tenant can still have a pending Intune action waiting for it if it was ever offline when the action was sent, and a wipe or retire sent to the wrong record hits a laptop someone is using in the destination. For old device objects, delete the record only, never wipe or retire. Check `Get-DeviceInventory.ps1` against the destination first, so you know every laptop has arrived.
 - **Trap: deleting users deletes their OneDrive** after the retention period. Copy or export first.
+- **Trap: free seats still cost money.** Removing licences doesn't lower the bill; the subscription charges for every seat until it ends. Turn off recurring billing as well.
 - **Trap: a renewal date you didn't see.** Annual subscriptions renew automatically. A CSP subscription is cancelled through the partner, not the admin centre. Find out which kind you have at T+1.
 - **Trap: message trace reads 5,000 rows at most.** If the script says so, look at the rest in the Exchange admin centre before you call the source quiet.
 - **Tip:** run `Get-DecommissionReadiness.ps1` at T+1, T+7, T+30 and 14 days before licence end. The WARN count should only go down.
@@ -106,5 +144,6 @@ With Microsoft's default settings, a OneDrive whose owner has no licence becomes
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.1.0 | 2026-11-24 | `Remove-SourceLicences.ps1`: pick-list of licences, removes them from users (skips break-glass, enabled accounts and mailboxes on hold), group licences optional, and the billing step for every subscription. Checklist T+30 rows point at it |
 | 1.0.1 | 2026-11-10 | Checklist: delete old device objects in the source once every laptop has moved with 08; never wipe or retire |
 | 1.0.0 | 2026-11-10 | First release of `Get-DecommissionReadiness.ps1`: sign-in, licences and renewal dates, domains, holds, mailboxes, mail flow and unlicensed OneDrives, PASS and WARN. Dated checklist from T+1 to tenant deletion. Replaces the planning page |
